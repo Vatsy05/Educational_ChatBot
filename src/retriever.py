@@ -1,4 +1,4 @@
-# src/retriever.py
+# src_retriever
 
 import faiss
 import pickle
