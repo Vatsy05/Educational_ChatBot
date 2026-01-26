@@ -10,8 +10,10 @@ import numpy as np
 DATA_PATH = "../data/raw"
 VECTORSTORE_PATH = "../vectorstore"
 
-CHUNK_SIZE = 200
+# Optimized for full textbooks
+CHUNK_SIZE = 300
 CHUNK_OVERLAP = 100
+BATCH_SIZE = 64   # embedding batch size (safe for Mac)
 
 
 def load_pdfs():
@@ -23,17 +25,16 @@ def load_pdfs():
 
         path = os.path.join(DATA_PATH, file)
         reader = PdfReader(path)
+        pages = reader.pages  # LOAD ALL PAGES
 
-        # Select pages smartly
-        if "CLRS" in file:
-            pages = reader.pages[:250]  # algorithms
-        elif "OS" in file:
-            pages = reader.pages[300:500]  # deadlock section
-        else:
-            pages = reader.pages[:200]
+        print(f"\n📘 Loading {file} with {len(pages)} pages")
 
         for page_num, page in enumerate(pages):
-            text = page.extract_text()
+            try:
+                text = page.extract_text()
+            except:
+                continue
+
             if text and len(text.strip()) > 300:
                 documents.append({
                     "text": text,
@@ -41,15 +42,21 @@ def load_pdfs():
                     "page": page_num + 1
                 })
 
+            # Progress log
+            if page_num % 50 == 0:
+                print(f"  Loaded page {page_num}")
+
     return documents
 
 
 def chunk_text(text):
     words = text.split()
     chunks = []
+
     for i in range(0, len(words), CHUNK_SIZE - CHUNK_OVERLAP):
         chunk = words[i:i + CHUNK_SIZE]
         chunks.append(" ".join(chunk))
+
     return chunks
 
 
@@ -66,11 +73,23 @@ def create_chunks(docs):
 
 
 def build_faiss(chunks):
+    print("\n🧠 Loading embedding model...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    texts = [c["chunk"] for c in chunks]
 
-    embeddings = model.encode(texts, show_progress_bar=True)
-    embeddings = np.array(embeddings).astype("float32")
+    texts = [c["chunk"] for c in chunks]
+    embeddings = []
+
+    print(f"⚙️ Creating embeddings in batches of {BATCH_SIZE}...")
+
+    for i in range(0, len(texts), BATCH_SIZE):
+        batch = texts[i:i + BATCH_SIZE]
+        emb = model.encode(batch, show_progress_bar=False)
+        embeddings.append(emb)
+
+        if i % 1000 == 0:
+            print(f"  Embedded {i}/{len(texts)} chunks")
+
+    embeddings = np.vstack(embeddings).astype("float32")
 
     # Normalize for cosine similarity
     faiss.normalize_L2(embeddings)
@@ -84,6 +103,8 @@ def build_faiss(chunks):
 
 def save_index(index, metadata):
     os.makedirs(VECTORSTORE_PATH, exist_ok=True)
+
+    print("\n💾 Saving FAISS index...")
     faiss.write_index(index, VECTORSTORE_PATH + "/faiss.index")
 
     with open(VECTORSTORE_PATH + "/metadata.pkl", "wb") as f:
@@ -91,18 +112,17 @@ def save_index(index, metadata):
 
 
 if __name__ == "__main__":
-    print("Loading PDFs...")
+    print("\n🚀 FULL TEXTBOOK INGESTION STARTED")
+
     docs = load_pdfs()
-    print(f"Loaded {len(docs)} pages")
+    print(f"\n✅ Loaded {len(docs)} pages")
 
-    print("Chunking...")
+    print("\n✂️ Chunking text...")
     chunks = create_chunks(docs)
-    print(f"Created {len(chunks)} chunks")
+    print(f"✅ Created {len(chunks)} chunks")
 
-    print("Building FAISS index...")
     index, metadata = build_faiss(chunks)
 
-    print("Saving vectorstore...")
     save_index(index, metadata)
 
-    print("DONE.")
+    print("\n🎉 FULL VECTOR DATABASE READY")
