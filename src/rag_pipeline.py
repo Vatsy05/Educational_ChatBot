@@ -1,6 +1,6 @@
 # src/rag_pipeline.py
 
-from retriever import search
+from retriever_hybrid import hybrid_search as search
 from llm import generate_answer
 
 
@@ -16,7 +16,7 @@ def rag_query(query):
 
 
 if __name__ == "__main__":
-    print("RAG Chatbot Ready. Type 'exit' to quit.\n")
+    print("🔥 Hybrid RAG Chatbot Ready (BM25 + FAISS). Type 'exit' to quit.\n")
 
     while True:
         query = input("Ask: ")
