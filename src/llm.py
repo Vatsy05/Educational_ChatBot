@@ -1,6 +1,11 @@
-# src_llm
+# src/llm.py
 
-import subprocess
+import requests
+import json
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3"
+
 
 def generate_answer(context, query):
     prompt = f"""
@@ -24,11 +29,11 @@ Question: {query}
 Explain clearly:
 """
 
-    result = subprocess.run(
-        ["ollama", "run", "llama3"],
-        input=prompt.encode(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "stream": False
+    }
 
-    return result.stdout.decode()
+    response = requests.post(OLLAMA_URL, json=payload)
+    return response.json()["response"]
